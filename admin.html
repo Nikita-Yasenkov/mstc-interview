@@ -23,14 +23,27 @@
     <h2>Interview Admin</h2>
     <div id="authBox">
       <span id="whoami" class="muted">Not signed in</span>
-      <button id="signinBtn">Sign in</button>
       <button id="signoutBtn" class="hidden">Sign out</button>
     </div>
   </header>
 
+  <!-- Email + Password Auth (no magic links) -->
+  <div id="authForm" class="card">
+    <h3>Admin sign in</h3>
+    <div class="muted">Only whitelisted emails can sign up.</div>
+    <label>Email <input id="email" type="email" placeholder="you@example.com"></label>
+    <label>Password <input id="password" type="password" placeholder="At least 6 characters"></label>
+    <div class="row">
+      <button id="signupBtn">Sign up</button>
+      <button id="signinBtn">Sign in</button>
+    </div>
+    <div id="authMsg" class="muted"></div>
+    <div class="muted" id="whitelistWrap" style="margin-top:6px;"></div>
+  </div>
+
   <div class="card">
     <h3>Admin Whitelist</h3>
-    <p class="muted">Only these emails will be admins on first sign-in (hardcoded here):</p>
+    <p class="muted">Only these emails can register as admins (hardcoded here):</p>
     <div id="adminList"></div>
   </div>
 
@@ -67,85 +80,114 @@
     // 2) INIT
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // 3) UI helpers
+    // 3) Helpers
     const byId = (id) => document.getElementById(id);
-    const adminOnly = byId('adminOnly');
     const whoami = byId('whoami');
+    const authForm = byId('authForm');
+    const authMsg = byId('authMsg');
+    const whitelistWrap = byId('whitelistWrap');
     const signinBtn = byId('signinBtn');
+    const signupBtn = byId('signupBtn');
     const signoutBtn = byId('signoutBtn');
+    const adminOnly = byId('adminOnly');
     const adminList = byId('adminList');
-
     adminList.innerHTML = ADMIN_EMAILS.map(e => `<span class="pill">${e}</span>`).join(" ");
+    whitelistWrap.textContent = `Allowed: ${ADMIN_EMAILS.join(", ")}`;
 
-    // 4) Auth
-    async function ensureProfile(user) {
-      if (!user) return;
-      const email = user.email;
-      const role = ADMIN_EMAILS.includes(email) ? 'admin' : 'user';
-
-      // Upsert profile (allowed by RLS because id must equal auth.uid)
+    async function ensureProfileAsAdmin(user) {
+      // Always set role to admin if email in whitelist; otherwise deny in UI.
       await supabase.from('profiles').upsert({
         id: user.id,
-        email,
-        role
+        email: user.email,
+        role: 'admin'
       });
     }
 
-    async function handleAuthChanged(event, session) {
-      const user = session?.user || null;
-      if (user) {
-        whoami.textContent = `Signed in as ${user.email}`;
-        signinBtn.classList.add('hidden');
-        signoutBtn.classList.remove('hidden');
+    function setAuthedUI(userEmail) {
+      whoami.textContent = `Signed in as ${userEmail}`;
+      signoutBtn.classList.remove('hidden');
+      authForm.classList.add('hidden');
+      adminOnly.classList.remove('hidden');
+    }
+    function setSignedOutUI() {
+      whoami.textContent = 'Not signed in';
+      signoutBtn.classList.add('hidden');
+      authForm.classList.remove('hidden');
+      adminOnly.classList.add('hidden');
+    }
 
-        await ensureProfile(user);
-        // Is admin?
-        const { data: me } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (me?.role === 'admin') {
-          adminOnly.classList.remove('hidden');
-          await loadInterviews();
-        } else {
-          adminOnly.classList.add('hidden');
-          alert('You are signed in, but not an admin.');
-        }
+    async function checkIsAdmin() {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const user = sessionData?.session?.user || null;
+      if (!user) { setSignedOutUI(); return; }
+      const email = user.email || "";
+      whoami.textContent = `Signed in as ${email}`;
+      // Only admins may proceed
+      const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      if (me?.role === 'admin') {
+        setAuthedUI(email);
+        await loadInterviews();
       } else {
-        whoami.textContent = 'Not signed in';
-        signinBtn.classList.remove('hidden');
-        signoutBtn.classList.add('hidden');
-        adminOnly.classList.add('hidden');
+        await supabase.auth.signOut();
+        setSignedOutUI();
+        alert('Access denied: not an admin.');
       }
     }
 
-    supabase.auth.onAuthStateChange(handleAuthChanged);
-    // On initial load, get session
-    supabase.auth.getSession().then(({ data }) => handleAuthChanged(null, data.session));
+    // Auth: Sign Up (only if email is whitelisted)
+    signupBtn.onclick = async () => {
+      const email = byId('email').value.trim();
+      const password = byId('password').value;
+      if (!email || !password) { authMsg.textContent = "Email and password required."; return; }
+      if (!ADMIN_EMAILS.includes(email)) { authMsg.textContent = "This email is not allowed to sign up."; return; }
+      authMsg.textContent = "Signing up...";
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) { authMsg.textContent = error.message; return; }
 
+      // If email confirmations are OFF, a session exists now:
+      const user = data.user;
+      if (user) {
+        await ensureProfileAsAdmin(user);
+        authMsg.textContent = "Sign-up successful.";
+        await checkIsAdmin();
+      } else {
+        authMsg.textContent = "Sign-up created. If confirmations are ON, check email and then sign in.";
+      }
+    };
+
+    // Auth: Sign In (password)
     signinBtn.onclick = async () => {
-      const email = prompt("Enter your email for a magic sign-in link:");
-      if (!email) return;
-      const { error } = await supabase.auth.signInWithOtp({ email });
-      if (error) alert(error.message);
-      else alert("Check your email for a sign-in link!");
+      const email = byId('email').value.trim();
+      const password = byId('password').value;
+      if (!email || !password) { authMsg.textContent = "Email and password required."; return; }
+      authMsg.textContent = "Signing in...";
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) { authMsg.textContent = error.message; return; }
+      // Optional: if the signed-in email is NOT in whitelist, block.
+      if (!ADMIN_EMAILS.includes(email)) {
+        await supabase.auth.signOut();
+        authMsg.textContent = "Access denied. This email is not admin whitelisted.";
+        return;
+      }
+      // Make sure profile exists & is admin
+      if (data.user) await ensureProfileAsAdmin(data.user);
+      authMsg.textContent = "Signed in.";
+      await checkIsAdmin();
     };
 
-    signoutBtn.onclick = async () => {
-      await supabase.auth.signOut();
-      location.reload();
-    };
+    signoutBtn.onclick = async () => { await supabase.auth.signOut(); setSignedOutUI(); };
 
-    // 5) Build Interview form
+    // Session watcher
+    supabase.auth.onAuthStateChange(() => { checkIsAdmin(); });
+    checkIsAdmin();
+
+    // ====== Interview builder (same as before) ======
     const qsDiv = byId('qs');
     const newQ = byId('newQ');
     const addQBtn = byId('addQBtn');
     const saveBtn = byId('saveBtn');
     const saveMsg = byId('saveMsg');
-
-    let questions = []; // array of {prompt}
+    let questions = []; // {prompt}
 
     function renderQs() {
       qsDiv.innerHTML = questions.map((q, i) => `
@@ -154,39 +196,24 @@
           <button data-rm="${i}">Remove</button>
         </div>
       `).join("");
-
-      // wire inputs
       qsDiv.querySelectorAll('.q-input').forEach(inp => {
-        inp.oninput = e => {
-          const idx = +e.target.getAttribute('data-idx');
-          questions[idx].prompt = e.target.value;
-        };
+        inp.oninput = e => { questions[+e.target.dataset.idx].prompt = e.target.value; };
       });
       qsDiv.querySelectorAll('button[data-rm]').forEach(btn => {
-        btn.onclick = () => {
-          const idx = +btn.getAttribute('data-rm');
-          questions.splice(idx,1);
-          renderQs();
-        };
+        btn.onclick = () => { questions.splice(+btn.dataset.rm,1); renderQs(); };
       });
     }
-
     addQBtn.onclick = () => {
-      const t = newQ.value.trim();
-      if (!t) return;
-      questions.push({ prompt: t });
-      newQ.value = "";
-      renderQs();
+      const t = newQ.value.trim(); if (!t) return;
+      questions.push({ prompt: t }); newQ.value = ""; renderQs();
     };
 
-    // 6) Save Interview + Questions
     async function saveInterview() {
       const title = byId('title').value.trim();
       if (!title) { alert("Title is required"); return; }
       const description = byId('description').value.trim();
       const is_public = byId('is_public').checked;
 
-      // Insert interview
       const { data: interview, error: iErr } = await supabase
         .from('interviews')
         .insert({ title, description, is_public })
@@ -194,7 +221,6 @@
         .single();
       if (iErr) { alert(iErr.message); return; }
 
-      // Insert questions with sort_order
       const rows = questions.map((q, idx) => ({
         interview_id: interview.id,
         prompt: q.prompt,
@@ -206,27 +232,20 @@
       }
 
       saveMsg.textContent = "Saved!";
-      questions = [];
-      renderQs();
-      byId('title').value = '';
-      byId('description').value = '';
-      byId('is_public').checked = true;
+      questions = []; renderQs();
+      byId('title').value = ''; byId('description').value = ''; byId('is_public').checked = true;
       await loadInterviews();
     }
     saveBtn.onclick = saveInterview;
 
-    // 7) List interviews
     async function loadInterviews() {
       const { data, error } = await supabase
         .from('interviews')
         .select('id,title,is_public,created_at')
         .order('created_at', { ascending: false });
-
       if (error) { alert(error.message); return; }
-
       const base = location.origin + location.pathname.replace('admin.html', '');
       const interviewLink = (id) => `${base}interview.html?interview_id=${id}`;
-
       byId('interviewList').innerHTML = (data || []).map(i => `
         <div class="card">
           <div><strong>${i.title}</strong></div>

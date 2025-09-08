@@ -15,6 +15,7 @@
     th, td { border:1px solid #e5e5e5; padding:8px; text-align:left; vertical-align: top; }
     pre { white-space: pre-wrap; word-break: break-word; background:#f7f7f7; padding:8px; border-radius:6px; }
     .hidden { display:none; }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid #ccc; border-radius:999px; margin:2px; font-size:12px; }
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
@@ -23,10 +24,27 @@
     <h2>Responses (Admin)</h2>
     <div>
       <span id="whoami" class="muted">Not signed in</span>
-      <button id="signinBtn">Sign in</button>
       <button id="signoutBtn" class="hidden">Sign out</button>
     </div>
   </header>
+
+  <div id="authForm" class="card">
+    <h3>Admin sign in</h3>
+    <div class="muted">Only whitelisted emails can sign up.</div>
+    <label>Email <input id="email" type="email" placeholder="you@example.com"></label>
+    <label>Password <input id="password" type="password" placeholder="At least 6 characters"></label>
+    <div class="row">
+      <button id="signupBtn">Sign up</button>
+      <button id="signinBtn">Sign in</button>
+    </div>
+    <div id="authMsg" class="muted"></div>
+    <div class="muted" id="whitelistWrap" style="margin-top:6px;"></div>
+  </div>
+
+  <div class="card">
+    <h3>Admin Whitelist</h3>
+    <div id="adminList"></div>
+  </div>
 
   <div id="adminOnly" class="hidden">
     <div class="card">
@@ -48,63 +66,191 @@
       "nikita@yasenkov.com"
     ];
 
+    console.log('🔧 INIT: Starting application initialization');
+    console.log('📦 Supabase available?', typeof window.supabase !== 'undefined');
+    
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('🔗 Supabase client created:', !!supabase);
 
     const byId = (id) => document.getElementById(id);
     const whoami = byId('whoami');
+    const authForm = byId('authForm');
+    const authMsg = byId('authMsg');
+    const whitelistWrap = byId('whitelistWrap');
     const signinBtn = byId('signinBtn');
+    const signupBtn = byId('signupBtn');
     const signoutBtn = byId('signoutBtn');
     const adminOnly = byId('adminOnly');
+    const adminList = byId('adminList');
+    
+    console.log('🎯 DOM elements found:');
+    console.log('  - signinBtn:', !!signinBtn);
+    console.log('  - signupBtn:', !!signupBtn);
+    console.log('  - authMsg:', !!authMsg);
+    console.log('  - whoami:', !!whoami);
+    
+    adminList.innerHTML = ADMIN_EMAILS.map(e => `<span class="pill">${e}</span>`).join(" ");
+    whitelistWrap.textContent = `Allowed: ${ADMIN_EMAILS.join(", ")}`;
+    
+    console.log('✅ INIT: Application initialized successfully');
 
-    async function ensureProfile(user) {
-      if (!user) return;
-      const role = ADMIN_EMAILS.includes(user.email) ? 'admin' : 'user';
-      await supabase.from('profiles').upsert({ id: user.id, email: user.email, role });
-    }
-
-    async function handleAuthChanged(event, session) {
-      const user = session?.user || null;
-      if (user) {
-        whoami.textContent = `Signed in as ${user.email}`;
-        signinBtn.classList.add('hidden');
-        signoutBtn.classList.remove('hidden');
-
-        await ensureProfile(user);
-        const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-        if (me?.role === 'admin') {
-          adminOnly.classList.remove('hidden');
-          await loadInterviews();
-        } else {
-          adminOnly.classList.add('hidden');
-          alert('You are signed in, but not an admin.');
-        }
+    async function ensureProfileAsAdmin(user) {
+      console.log('👥 Creating/updating profile for user:', user.id, user.email);
+      const { data, error } = await supabase.from('profiles').upsert({
+        id: user.id,
+        email: user.email,
+        role: 'admin'
+      });
+      console.log('📊 Profile upsert result:', { data, error });
+      if (error) {
+        console.log('❌ Failed to create/update profile:', error);
       } else {
-        whoami.textContent = 'Not signed in';
-        signinBtn.classList.remove('hidden');
-        signoutBtn.classList.add('hidden');
-        adminOnly.classList.add('hidden');
+        console.log('✅ Profile created/updated successfully');
       }
     }
 
-    supabase.auth.onAuthStateChange(handleAuthChanged);
-    supabase.auth.getSession().then(({ data }) => handleAuthChanged(null, data.session));
+    function setAuthedUI(email) {
+      whoami.textContent = `Signed in as ${email}`;
+      signoutBtn.classList.remove('hidden');
+      authForm.classList.add('hidden');
+      adminOnly.classList.remove('hidden');
+    }
+    function setSignedOutUI() {
+      whoami.textContent = 'Not signed in';
+      signoutBtn.classList.add('hidden');
+      authForm.classList.remove('hidden');
+      adminOnly.classList.add('hidden');
+    }
+
+    async function checkIsAdmin() {
+      console.log('🔍 DEBUG: Checking admin status...');
+      
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log('📋 Session data:', sessionData);
+      
+      const user = sessionData?.session?.user || null;
+      console.log('👤 Current user:', user);
+      
+      if (!user) { 
+        console.log('❌ No user session found, showing sign-out UI');
+        setSignedOutUI(); 
+        return; 
+      }
+      
+      const email = user.email || "";
+      console.log('📧 User email from session:', email);
+      console.log('🎯 Email in whitelist?', ADMIN_EMAILS.includes(email));
+      
+      console.log('🔍 Fetching user profile from database...');
+      const { data: me, error: profileError } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      
+      console.log('👥 Profile data:', me);
+      console.log('❗ Profile error:', profileError);
+      
+      if (me?.role === 'admin' && ADMIN_EMAILS.includes(email)) {
+        console.log('✅ User is confirmed admin, setting authenticated UI');
+        setAuthedUI(email);
+        await loadInterviews();
+      } else {
+        console.log('🚫 User is not admin or not whitelisted');
+        console.log('📊 Profile role:', me?.role);
+        console.log('🎯 Email check result:', ADMIN_EMAILS.includes(email));
+        await supabase.auth.signOut();
+        setSignedOutUI();
+        alert('Access denied: not an admin.');
+      }
+    }
+
+    signupBtn.onclick = async () => {
+      const email = byId('email').value.trim();
+      const password = byId('password').value;
+      if (!email || !password) { authMsg.textContent = "Email and password required."; return; }
+      if (!ADMIN_EMAILS.includes(email)) { authMsg.textContent = "This email is not allowed to sign up."; return; }
+      authMsg.textContent = "Signing up...";
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) { authMsg.textContent = error.message; return; }
+      if (data.user) {
+        await ensureProfileAsAdmin(data.user);
+        authMsg.textContent = "Sign-up successful.";
+        await checkIsAdmin();
+      } else {
+        authMsg.textContent = "Sign-up created. If confirmations are ON, check email and then sign in.";
+      }
+    };
 
     signinBtn.onclick = async () => {
-      const email = prompt("Enter your email for a magic sign-in link:");
-      if (!email) return;
-      const { error } = await supabase.auth.signInWithOtp({ email });
-      if (error) alert(error.message);
-      else alert("Check your email for a sign-in link!");
+      console.log('🚀 BUTTON CLICKED! Sign in button was pressed');
+      
+      const email = byId('email').value.trim();
+      const password = byId('password').value;
+      
+      console.log('🔍 DEBUG: Starting sign-in process');
+      console.log('📧 Email entered:', email);
+      console.log('🔑 Password length:', password.length);
+      console.log('✅ Whitelisted emails:', ADMIN_EMAILS);
+      console.log('🎯 Email in whitelist?', ADMIN_EMAILS.includes(email));
+      
+      if (!email || !password) { 
+        authMsg.textContent = "❌ Email and password required."; 
+        console.log('❌ Missing email or password');
+        return; 
+      }
+      
+      authMsg.textContent = "🔄 Signing in...";
+      console.log('🚀 Attempting Supabase authentication...');
+      
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      console.log('📊 Supabase response data:', data);
+      console.log('❗ Supabase error:', error);
+      
+      if (error) { 
+        authMsg.textContent = `❌ ${error.message}`; 
+        console.log('💥 Authentication failed:', error.message);
+        console.log('🔍 Error details:', error);
+        return; 
+      }
+      
+      console.log('✅ Supabase authentication successful');
+      console.log('👤 User object:', data.user);
+      
+      if (!ADMIN_EMAILS.includes(email)) {
+        console.log('🚫 Email not in admin whitelist, signing out...');
+        await supabase.auth.signOut();
+        authMsg.textContent = "❌ Access denied. This email is not admin whitelisted.";
+        return;
+      }
+      
+      console.log('✅ Email is whitelisted, proceeding...');
+      
+      if (data.user) {
+        console.log('👥 Creating/updating admin profile...');
+        await ensureProfileAsAdmin(data.user);
+      }
+      
+      authMsg.textContent = "✅ Signed in successfully!";
+      console.log('🎉 Sign-in process completed, checking admin status...');
+      await checkIsAdmin();
     };
-    signoutBtn.onclick = async () => { await supabase.auth.signOut(); location.reload(); };
 
+    signoutBtn.onclick = async () => { await supabase.auth.signOut(); setSignedOutUI(); };
+    
+    console.log('🔧 Setting up event handlers...');
+    console.log('📝 Sign-in handler attached:', typeof signinBtn.onclick === 'function');
+    console.log('📝 Sign-up handler attached:', typeof signupBtn.onclick === 'function');
+    console.log('📝 Sign-out handler attached:', typeof signoutBtn.onclick === 'function');
+    
+    supabase.auth.onAuthStateChange(() => { checkIsAdmin(); });
+    console.log('🔄 Starting initial admin check...');
+    checkIsAdmin();
+
+    // ===== Responses =====
     async function loadInterviews() {
       const sel = byId('interviewSelect');
       const { data, error } = await supabase
         .from('interviews')
         .select('id,title,created_at')
         .order('created_at', { ascending: false });
-
       if (error) { alert(error.message); return; }
       sel.innerHTML = (data || []).map(i => `<option value="${i.id}">${i.title}</option>`).join('');
       await loadResponses();
@@ -120,18 +266,15 @@
         .eq('interview_id', id)
         .order('sort_order', { ascending: true });
 
-      const qMap = {};
-      (qs || []).forEach(q => qMap[q.id] = q.prompt);
+      const qMap = {}; (qs || []).forEach(q => qMap[q.id] = q.prompt);
 
       const { data: rows, error } = await supabase
         .from('responses')
         .select('id, respondent_name, respondent_email, answers, submitted_at')
         .eq('interview_id', id)
         .order('submitted_at', { ascending: false });
-
       if (error) { alert(error.message); return; }
 
-      // Render a simple table
       const table = `
         <table>
           <thead>

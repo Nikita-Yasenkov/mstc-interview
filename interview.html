@@ -31,7 +31,7 @@
   <script>
     const SUPABASE_URL = "https://zhtkgfouvtqjhzvsxcpp.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpodGtnZm91dnRxamh6dnN4Y3BwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTczMDM0NDAsImV4cCI6MjA3Mjg3OTQ0MH0.U1HPWpOG2HoH42F7EAACBfyEwt6INVKLBkz-jmwJEgM";
-
+   
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const params = new URLSearchParams(location.search);
@@ -69,7 +69,7 @@
       }
 
       const form = byId('form');
-      form.innerHTML = qs.map(q => `
+      form.innerHTML = (qs || []).map(q => `
         <div class="card">
           <div class="muted">Question</div>
           <label>${q.prompt}</label>
@@ -87,7 +87,6 @@
         answers[t.getAttribute('data-qid')] = t.value.trim();
       });
 
-      // Store as JSON: { question_id: "answer" }
       const { error } = await supabase
         .from('responses')
         .insert({
