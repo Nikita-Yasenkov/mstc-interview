@@ -29,8 +29,9 @@
   <p id="done" class="muted"></p>
 
   <script>
-    const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE";
-    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY_HERE";
+    const SUPABASE_URL = "https://zhtkgfouvtqjhzvsxcpp.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpodGtnZm91dnRxamh6dnN4Y3BwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTczMDM0NDAsImV4cCI6MjA3Mjg3OTQ0MH0.U1HPWpOG2HoH42F7EAACBfyEwt6INVKLBkz-jmwJEgM";
+
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const params = new URLSearchParams(location.search);
