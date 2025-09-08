@@ -1,0 +1,242 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Interview Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 800px; margin: 24px auto; padding: 0 12px; }
+    header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px; }
+    input, textarea, button, select { padding:8px; margin:6px 0; width:100%; box-sizing:border-box; }
+    .row { display:flex; gap:8px; }
+    .row > * { flex:1; }
+    .card { border:1px solid #ddd; border-radius:8px; padding:12px; margin:12px 0; }
+    .muted { color:#666; font-size: 0.9em; }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid #ccc; border-radius:999px; margin:2px; font-size:12px; }
+    .hidden { display:none; }
+    code { background:#f6f6f6; padding:2px 4px; border-radius:4px; }
+  </style>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header>
+    <h2>Interview Admin</h2>
+    <div id="authBox">
+      <span id="whoami" class="muted">Not signed in</span>
+      <button id="signinBtn">Sign in</button>
+      <button id="signoutBtn" class="hidden">Sign out</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <h3>Admin Whitelist</h3>
+    <p class="muted">Only these emails will be admins on first sign-in (hardcoded here):</p>
+    <div id="adminList"></div>
+  </div>
+
+  <div id="adminOnly" class="hidden">
+    <div class="card">
+      <h3>Create Interview</h3>
+      <label>Title <input id="title" placeholder="e.g., Backend Engineer Interview"></label>
+      <label>Description <textarea id="description" placeholder="Short description"></textarea></label>
+      <label><input type="checkbox" id="is_public" checked> Public (anyone can view questions & submit)</label>
+      <h4>Questions</h4>
+      <div id="qs"></div>
+      <div class="row">
+        <input id="newQ" placeholder="Type a question...">
+        <button id="addQBtn">Add Question</button>
+      </div>
+      <button id="saveBtn">Save Interview</button>
+      <div id="saveMsg" class="muted"></div>
+    </div>
+
+    <div class="card">
+      <h3>Your Interviews</h3>
+      <div id="interviewList"></div>
+    </div>
+  </div>
+
+  <script>
+    // 1) CONFIG
+    const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE";
+    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY_HERE";
+    const ADMIN_EMAILS = [
+      "you@example.com",
+      "teammate@example.com"
+    ];
+
+    // 2) INIT
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // 3) UI helpers
+    const byId = (id) => document.getElementById(id);
+    const adminOnly = byId('adminOnly');
+    const whoami = byId('whoami');
+    const signinBtn = byId('signinBtn');
+    const signoutBtn = byId('signoutBtn');
+    const adminList = byId('adminList');
+
+    adminList.innerHTML = ADMIN_EMAILS.map(e => `<span class="pill">${e}</span>`).join(" ");
+
+    // 4) Auth
+    async function ensureProfile(user) {
+      if (!user) return;
+      const email = user.email;
+      const role = ADMIN_EMAILS.includes(email) ? 'admin' : 'user';
+
+      // Upsert profile (allowed by RLS because id must equal auth.uid)
+      await supabase.from('profiles').upsert({
+        id: user.id,
+        email,
+        role
+      });
+    }
+
+    async function handleAuthChanged(event, session) {
+      const user = session?.user || null;
+      if (user) {
+        whoami.textContent = `Signed in as ${user.email}`;
+        signinBtn.classList.add('hidden');
+        signoutBtn.classList.remove('hidden');
+
+        await ensureProfile(user);
+        // Is admin?
+        const { data: me } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        if (me?.role === 'admin') {
+          adminOnly.classList.remove('hidden');
+          await loadInterviews();
+        } else {
+          adminOnly.classList.add('hidden');
+          alert('You are signed in, but not an admin.');
+        }
+      } else {
+        whoami.textContent = 'Not signed in';
+        signinBtn.classList.remove('hidden');
+        signoutBtn.classList.add('hidden');
+        adminOnly.classList.add('hidden');
+      }
+    }
+
+    supabase.auth.onAuthStateChange(handleAuthChanged);
+    // On initial load, get session
+    supabase.auth.getSession().then(({ data }) => handleAuthChanged(null, data.session));
+
+    signinBtn.onclick = async () => {
+      const email = prompt("Enter your email for a magic sign-in link:");
+      if (!email) return;
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      if (error) alert(error.message);
+      else alert("Check your email for a sign-in link!");
+    };
+
+    signoutBtn.onclick = async () => {
+      await supabase.auth.signOut();
+      location.reload();
+    };
+
+    // 5) Build Interview form
+    const qsDiv = byId('qs');
+    const newQ = byId('newQ');
+    const addQBtn = byId('addQBtn');
+    const saveBtn = byId('saveBtn');
+    const saveMsg = byId('saveMsg');
+
+    let questions = []; // array of {prompt}
+
+    function renderQs() {
+      qsDiv.innerHTML = questions.map((q, i) => `
+        <div class="row">
+          <input value="${q.prompt}" data-idx="${i}" class="q-input"/>
+          <button data-rm="${i}">Remove</button>
+        </div>
+      `).join("");
+
+      // wire inputs
+      qsDiv.querySelectorAll('.q-input').forEach(inp => {
+        inp.oninput = e => {
+          const idx = +e.target.getAttribute('data-idx');
+          questions[idx].prompt = e.target.value;
+        };
+      });
+      qsDiv.querySelectorAll('button[data-rm]').forEach(btn => {
+        btn.onclick = () => {
+          const idx = +btn.getAttribute('data-rm');
+          questions.splice(idx,1);
+          renderQs();
+        };
+      });
+    }
+
+    addQBtn.onclick = () => {
+      const t = newQ.value.trim();
+      if (!t) return;
+      questions.push({ prompt: t });
+      newQ.value = "";
+      renderQs();
+    };
+
+    // 6) Save Interview + Questions
+    async function saveInterview() {
+      const title = byId('title').value.trim();
+      if (!title) { alert("Title is required"); return; }
+      const description = byId('description').value.trim();
+      const is_public = byId('is_public').checked;
+
+      // Insert interview
+      const { data: interview, error: iErr } = await supabase
+        .from('interviews')
+        .insert({ title, description, is_public })
+        .select()
+        .single();
+      if (iErr) { alert(iErr.message); return; }
+
+      // Insert questions with sort_order
+      const rows = questions.map((q, idx) => ({
+        interview_id: interview.id,
+        prompt: q.prompt,
+        sort_order: idx + 1
+      }));
+      if (rows.length) {
+        const { error: qErr } = await supabase.from('questions').insert(rows);
+        if (qErr) { alert(qErr.message); return; }
+      }
+
+      saveMsg.textContent = "Saved!";
+      questions = [];
+      renderQs();
+      byId('title').value = '';
+      byId('description').value = '';
+      byId('is_public').checked = true;
+      await loadInterviews();
+    }
+    saveBtn.onclick = saveInterview;
+
+    // 7) List interviews
+    async function loadInterviews() {
+      const { data, error } = await supabase
+        .from('interviews')
+        .select('id,title,is_public,created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) { alert(error.message); return; }
+
+      const base = location.origin + location.pathname.replace('admin.html', '');
+      const interviewLink = (id) => `${base}interview.html?interview_id=${id}`;
+
+      byId('interviewList').innerHTML = (data || []).map(i => `
+        <div class="card">
+          <div><strong>${i.title}</strong></div>
+          <div class="muted">Public: ${i.is_public ? 'Yes' : 'No'} · Created: ${new Date(i.created_at).toLocaleString()}</div>
+          <div>Share link: <code>${interviewLink(i.id)}</code></div>
+          <button onclick="navigator.clipboard.writeText('${interviewLink(i.id)}')">Copy link</button>
+        </div>
+      `).join('');
+    }
+  </script>
+</body>
+</html>
