@@ -1,0 +1,171 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Interview Responses (Admin)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 1000px; margin: 24px auto; padding: 0 12px; }
+    header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px; }
+    input, textarea, button, select { padding:8px; margin:6px 0; }
+    .row { display:flex; gap:12px; align-items:center; }
+    .card { border:1px solid #ddd; border-radius:8px; padding:12px; margin:12px 0; }
+    .muted { color:#666; font-size: 0.9em; }
+    table { width:100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border:1px solid #e5e5e5; padding:8px; text-align:left; vertical-align: top; }
+    pre { white-space: pre-wrap; word-break: break-word; background:#f7f7f7; padding:8px; border-radius:6px; }
+    .hidden { display:none; }
+  </style>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header>
+    <h2>Responses (Admin)</h2>
+    <div>
+      <span id="whoami" class="muted">Not signed in</span>
+      <button id="signinBtn">Sign in</button>
+      <button id="signoutBtn" class="hidden">Sign out</button>
+    </div>
+  </header>
+
+  <div id="adminOnly" class="hidden">
+    <div class="card">
+      <div class="row">
+        <label style="min-width:220px;">
+          Select interview:
+          <select id="interviewSelect"></select>
+        </label>
+        <button id="refreshBtn">Refresh</button>
+      </div>
+      <div id="tableWrap"></div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE";
+    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY_HERE";
+    const ADMIN_EMAILS = [
+      "you@example.com",
+      "teammate@example.com"
+    ];
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const byId = (id) => document.getElementById(id);
+    const whoami = byId('whoami');
+    const signinBtn = byId('signinBtn');
+    const signoutBtn = byId('signoutBtn');
+    const adminOnly = byId('adminOnly');
+
+    async function ensureProfile(user) {
+      if (!user) return;
+      const role = ADMIN_EMAILS.includes(user.email) ? 'admin' : 'user';
+      await supabase.from('profiles').upsert({ id: user.id, email: user.email, role });
+    }
+
+    async function handleAuthChanged(event, session) {
+      const user = session?.user || null;
+      if (user) {
+        whoami.textContent = `Signed in as ${user.email}`;
+        signinBtn.classList.add('hidden');
+        signoutBtn.classList.remove('hidden');
+
+        await ensureProfile(user);
+        const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (me?.role === 'admin') {
+          adminOnly.classList.remove('hidden');
+          await loadInterviews();
+        } else {
+          adminOnly.classList.add('hidden');
+          alert('You are signed in, but not an admin.');
+        }
+      } else {
+        whoami.textContent = 'Not signed in';
+        signinBtn.classList.remove('hidden');
+        signoutBtn.classList.add('hidden');
+        adminOnly.classList.add('hidden');
+      }
+    }
+
+    supabase.auth.onAuthStateChange(handleAuthChanged);
+    supabase.auth.getSession().then(({ data }) => handleAuthChanged(null, data.session));
+
+    signinBtn.onclick = async () => {
+      const email = prompt("Enter your email for a magic sign-in link:");
+      if (!email) return;
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      if (error) alert(error.message);
+      else alert("Check your email for a sign-in link!");
+    };
+    signoutBtn.onclick = async () => { await supabase.auth.signOut(); location.reload(); };
+
+    async function loadInterviews() {
+      const sel = byId('interviewSelect');
+      const { data, error } = await supabase
+        .from('interviews')
+        .select('id,title,created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) { alert(error.message); return; }
+      sel.innerHTML = (data || []).map(i => `<option value="${i.id}">${i.title}</option>`).join('');
+      await loadResponses();
+    }
+
+    async function loadResponses() {
+      const id = byId('interviewSelect').value;
+      if (!id) return;
+
+      const { data: qs } = await supabase
+        .from('questions')
+        .select('id,prompt,sort_order')
+        .eq('interview_id', id)
+        .order('sort_order', { ascending: true });
+
+      const qMap = {};
+      (qs || []).forEach(q => qMap[q.id] = q.prompt);
+
+      const { data: rows, error } = await supabase
+        .from('responses')
+        .select('id, respondent_name, respondent_email, answers, submitted_at')
+        .eq('interview_id', id)
+        .order('submitted_at', { ascending: false });
+
+      if (error) { alert(error.message); return; }
+
+      // Render a simple table
+      const table = `
+        <table>
+          <thead>
+            <tr>
+              <th>Submitted</th>
+              <th>Respondent</th>
+              <th>Answers</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(rows || []).map(r => {
+              const answers = r.answers || {};
+              const pretty = Object.entries(answers).map(([qid, val]) => {
+                const prompt = qMap[qid] || qid;
+                return `• ${prompt}\n${val || ''}`;
+              }).join('\n\n');
+              const who = [r.respondent_name, r.respondent_email].filter(Boolean).join(' — ');
+              return `
+                <tr>
+                  <td>${new Date(r.submitted_at).toLocaleString()}</td>
+                  <td>${who || 'Anonymous'}</td>
+                  <td><pre>${pretty}</pre></td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+      byId('tableWrap').innerHTML = table || '<p class="muted">No responses yet.</p>';
+    }
+
+    byId('refreshBtn').onclick = loadResponses;
+    byId('interviewSelect').onchange = loadResponses;
+  </script>
+</body>
+</html>
