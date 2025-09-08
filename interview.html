@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Interview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 800px; margin: 24px auto; padding: 0 12px; }
+    input, textarea, button { padding:8px; margin:6px 0; width:100%; box-sizing:border-box; }
+    .card { border:1px solid #ddd; border-radius:8px; padding:12px; margin:12px 0; }
+    .muted { color:#666; font-size: 0.9em; }
+    label { font-weight: 600; }
+  </style>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <h2 id="title">Interview</h2>
+  <p id="desc" class="muted"></p>
+
+  <div class="card">
+    <h3>Your Info</h3>
+    <label>Name <input id="r_name" placeholder="Jane Doe"></label>
+    <label>Email (optional) <input id="r_email" placeholder="jane@example.com"></label>
+  </div>
+
+  <form id="form"></form>
+
+  <button id="submitBtn">Submit Answers</button>
+  <p id="done" class="muted"></p>
+
+  <script>
+    const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE";
+    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY_HERE";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const params = new URLSearchParams(location.search);
+    const interview_id = params.get('interview_id');
+
+    const byId = (id) => document.getElementById(id);
+
+    if (!interview_id) {
+      document.body.innerHTML = "<p>Missing interview_id in URL.</p>";
+      throw new Error("missing interview_id");
+    }
+
+    async function loadInterview() {
+      const { data: interview, error: iErr } = await supabase
+        .from('interviews')
+        .select('*')
+        .eq('id', interview_id)
+        .single();
+      if (iErr || !interview) {
+        document.body.innerHTML = "<p>This interview is not available.</p>";
+        return;
+      }
+      byId('title').textContent = interview.title;
+      byId('desc').textContent = interview.description || '';
+
+      const { data: qs, error: qErr } = await supabase
+        .from('questions')
+        .select('*')
+        .eq('interview_id', interview_id)
+        .order('sort_order', { ascending: true });
+
+      if (qErr) {
+        document.body.innerHTML = "<p>Failed to load questions.</p>";
+        return;
+      }
+
+      const form = byId('form');
+      form.innerHTML = qs.map(q => `
+        <div class="card">
+          <div class="muted">Question</div>
+          <label>${q.prompt}</label>
+          <textarea data-qid="${q.id}" rows="4" placeholder="Your answer..."></textarea>
+        </div>
+      `).join('');
+    }
+
+    async function submitAnswers() {
+      const name = byId('r_name').value.trim();
+      const email = byId('r_email').value.trim();
+
+      const answers = {};
+      document.querySelectorAll('textarea[data-qid]').forEach(t => {
+        answers[t.getAttribute('data-qid')] = t.value.trim();
+      });
+
+      // Store as JSON: { question_id: "answer" }
+      const { error } = await supabase
+        .from('responses')
+        .insert({
+          interview_id,
+          respondent_name: name || null,
+          respondent_email: email || null,
+          answers
+        });
+
+      if (error) {
+        alert(error.message);
+      } else {
+        byId('done').textContent = "Thank you! Your responses have been submitted.";
+        document.getElementById('submitBtn').disabled = true;
+      }
+    }
+
+    byId('submitBtn').onclick = submitAnswers;
+    loadInterview();
+  </script>
+</body>
+</html>
