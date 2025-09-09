@@ -1,0 +1,420 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MSTC Interview Platform</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+      margin: 0; 
+      padding: 0; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    
+    .container { 
+      max-width: 1200px; 
+      margin: 0 auto; 
+      padding: 20px; 
+    }
+    
+    header {
+      text-align: center;
+      color: white;
+      padding: 40px 0;
+    }
+    
+    h1 {
+      font-size: 3rem;
+      margin: 0 0 10px 0;
+      font-weight: 700;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    .subtitle {
+      font-size: 1.2rem;
+      opacity: 0.9;
+      margin-bottom: 40px;
+    }
+    
+    .nav-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin: 40px 0;
+    }
+    
+    .nav-card {
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .nav-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+    
+    .nav-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+    }
+    
+    .card-icon {
+      font-size: 3rem;
+      margin-bottom: 20px;
+      display: block;
+    }
+    
+    .card-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 0 0 10px 0;
+      color: #333;
+    }
+    
+    .card-description {
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    
+    .card-badge {
+      display: inline-block;
+      background: #f0f0f0;
+      color: #666;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    
+    .admin-badge { background: #ffe6e6; color: #d63384; }
+    .public-badge { background: #e6f3ff; color: #0066cc; }
+    
+    .features {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      margin: 40px 0;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    
+    .features h2 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 30px;
+      font-size: 2rem;
+    }
+    
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 30px;
+    }
+    
+    .feature {
+      text-align: center;
+      padding: 20px;
+    }
+    
+    .feature-icon {
+      font-size: 2.5rem;
+      margin-bottom: 15px;
+      display: block;
+    }
+    
+    .feature h3 {
+      color: #333;
+      margin: 0 0 10px 0;
+      font-size: 1.2rem;
+    }
+    
+    .feature p {
+      color: #666;
+      line-height: 1.5;
+      margin: 0;
+    }
+    
+    footer {
+      text-align: center;
+      color: white;
+      opacity: 0.8;
+      padding: 20px 0;
+      margin-top: 40px;
+    }
+    
+    .quick-links {
+      background: rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 30px 0;
+      backdrop-filter: blur(10px);
+    }
+    
+    .quick-links h3 {
+      color: white;
+      margin: 0 0 15px 0;
+      text-align: center;
+    }
+    
+    .links-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+    }
+    
+    .quick-link {
+      display: block;
+      background: rgba(255,255,255,0.2);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      text-align: center;
+      transition: all 0.3s ease;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    
+    .quick-link:hover {
+      background: rgba(255,255,255,0.3);
+      transform: translateY(-2px);
+    }
+    
+    @media (max-width: 768px) {
+      h1 { font-size: 2rem; }
+      .nav-cards { grid-template-columns: 1fr; }
+      .container { padding: 15px; }
+      header { padding: 30px 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>MSTC Interview Platform</h1>
+      <p class="subtitle">Streamlined interview management and response collection</p>
+    </header>
+    
+    <div class="nav-cards">
+      <a href="#" class="nav-card" onclick="navigateToPublicInterviews()">
+        <span class="card-icon">👥</span>
+        <h2 class="card-title">Take Interview</h2>
+        <p class="card-description">
+          Participate in available public interviews. Answer questions and submit your responses.
+        </p>
+        <span class="card-badge public-badge">Public Access</span>
+      </a>
+      
+      <a href="admin.html" class="nav-card">
+        <span class="card-icon">⚙️</span>
+        <h2 class="card-title">Admin Portal</h2>
+        <p class="card-description">
+          Create and manage interviews, add questions, and configure settings. Admin authentication required.
+        </p>
+        <span class="card-badge admin-badge">Admin Only</span>
+      </a>
+      
+      <a href="responses.html" class="nav-card">
+        <span class="card-icon">📊</span>
+        <h2 class="card-title">View Responses</h2>
+        <p class="card-description">
+          Review and analyze submitted interview responses. Export data and manage submissions.
+        </p>
+        <span class="card-badge admin-badge">Admin Only</span>
+      </a>
+    </div>
+    
+    <div class="quick-links">
+      <h3>Quick Access</h3>
+      <div class="links-grid">
+        <a href="#" class="quick-link" onclick="showInterviewList()">Browse Interviews</a>
+        <a href="admin.html" class="quick-link">Admin Login</a>
+        <a href="#features" class="quick-link" onclick="scrollToFeatures()">Platform Features</a>
+      </div>
+    </div>
+    
+    <div class="features" id="features">
+      <h2>Platform Features</h2>
+      <div class="feature-grid">
+        <div class="feature">
+          <span class="feature-icon">🔐</span>
+          <h3>Secure Authentication</h3>
+          <p>Admin-only access with email whitelist and secure password authentication via Supabase.</p>
+        </div>
+        
+        <div class="feature">
+          <span class="feature-icon">📝</span>
+          <h3>Dynamic Interviews</h3>
+          <p>Create custom interviews with unlimited questions and flexible response formats.</p>
+        </div>
+        
+        <div class="feature">
+          <span class="feature-icon">📈</span>
+          <h3>Response Analytics</h3>
+          <p>View and analyze all submitted responses with detailed reporting and data export.</p>
+        </div>
+        
+        <div class="feature">
+          <span class="feature-icon">🌐</span>
+          <h3>Public Access</h3>
+          <p>Share interview links publicly for easy candidate access without registration.</p>
+        </div>
+        
+        <div class="feature">
+          <span class="feature-icon">⚡</span>
+          <h3>Real-time Updates</h3>
+          <p>Instant synchronization of interviews and responses across all admin interfaces.</p>
+        </div>
+        
+        <div class="feature">
+          <span class="feature-icon">📱</span>
+          <h3>Mobile Friendly</h3>
+          <p>Responsive design ensures great experience on all devices and screen sizes.</p>
+        </div>
+      </div>
+    </div>
+    
+    <footer>
+      <p>&copy; 2024 MSTC Interview Platform. Built with modern web technologies.</p>
+    </footer>
+  </div>
+  
+  <!-- Interview Selection Modal -->
+  <div id="interviewModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; padding: 20px;">
+    <div style="background: white; border-radius: 16px; max-width: 600px; margin: 50px auto; padding: 30px; max-height: 80vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0; color: #333;">Select an Interview</h2>
+        <button onclick="closeInterviewModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
+      </div>
+      <div id="interviewList" style="margin-bottom: 20px;">
+        <p style="text-align: center; color: #666;">Loading available interviews...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script>
+    // Supabase configuration
+    const SUPABASE_URL = "https://zhtkgfouvtqjhzvsxcpp.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpodGtnZm91dnRxamh6dnN4Y3BwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTczMDM0NDAsImV4cCI6MjA3Mjg3OTQ0MH0.U1HPWpOG2HoH42F7EAACBfyEwt6INVKLBkz-jmwJEgM";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // Navigation functions
+    function scrollToFeatures() {
+      document.getElementById('features').scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    async function navigateToPublicInterviews() {
+      showInterviewList();
+    }
+    
+    async function showInterviewList() {
+      document.getElementById('interviewModal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+      
+      try {
+        const { data: interviews, error } = await supabase
+          .from('interviews')
+          .select('id, title, description, is_public, created_at')
+          .eq('is_public', true)
+          .order('created_at', { ascending: false });
+          
+        const listDiv = document.getElementById('interviewList');
+        
+        if (error) {
+          listDiv.innerHTML = '<p style="color: #d63384; text-align: center;">Error loading interviews. Please try again.</p>';
+          return;
+        }
+        
+        if (!interviews || interviews.length === 0) {
+          listDiv.innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+              <span style="font-size: 3rem;">📝</span>
+              <h3 style="color: #666; margin: 20px 0 10px 0;">No Public Interviews Available</h3>
+              <p style="color: #999;">Check back later or contact an administrator to create interviews.</p>
+              <a href="admin.html" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 8px;">Admin Portal</a>
+            </div>
+          `;
+          return;
+        }
+        
+        listDiv.innerHTML = interviews.map(interview => `
+          <div style="border: 1px solid #ddd; border-radius: 12px; padding: 20px; margin-bottom: 15px; cursor: pointer; transition: all 0.3s ease;" 
+               onmouseover="this.style.boxShadow='0 5px 15px rgba(0,0,0,0.1)'" 
+               onmouseout="this.style.boxShadow='none'"
+               onclick="goToInterview('${interview.id}')">
+            <h3 style="margin: 0 0 10px 0; color: #333; font-size: 1.3rem;">${interview.title}</h3>
+            <p style="color: #666; margin: 0 0 15px 0; line-height: 1.5;">${interview.description || 'No description provided.'}</p>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="background: #e6f3ff; color: #0066cc; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem;">Public Interview</span>
+              <span style="color: #999; font-size: 0.9rem;">Created: ${new Date(interview.created_at).toLocaleDateString()}</span>
+            </div>
+          </div>
+        `).join('');
+        
+      } catch (err) {
+        document.getElementById('interviewList').innerHTML = '<p style="color: #d63384; text-align: center;">Failed to connect to the database.</p>';
+      }
+    }
+    
+    function closeInterviewModal() {
+      document.getElementById('interviewModal').style.display = 'none';
+      document.body.style.overflow = 'auto';
+    }
+    
+    function goToInterview(interviewId) {
+      window.location.href = `interview.html?interview_id=${interviewId}`;
+    }
+    
+    // Close modal when clicking outside
+    document.getElementById('interviewModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeInterviewModal();
+      }
+    });
+    
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeInterviewModal();
+      }
+    });
+    
+    // Add some interactive animations
+    document.addEventListener('DOMContentLoaded', function() {
+      // Animate cards on scroll
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+          }
+        });
+      });
+      
+      // Initially hide elements for animation
+      document.querySelectorAll('.nav-card, .feature').forEach((el) => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(20px)';
+        el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(el);
+      });
+    });
+  </script>
+</body>
+</html>

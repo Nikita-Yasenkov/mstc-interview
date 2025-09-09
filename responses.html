@@ -66,11 +66,7 @@
       "nikita@yasenkov.com"
     ];
 
-    console.log('🔧 INIT: Starting application initialization');
-    console.log('📦 Supabase available?', typeof window.supabase !== 'undefined');
-    
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    console.log('🔗 Supabase client created:', !!supabase);
 
     const byId = (id) => document.getElementById(id);
     const whoami = byId('whoami');
@@ -82,31 +78,15 @@
     const signoutBtn = byId('signoutBtn');
     const adminOnly = byId('adminOnly');
     const adminList = byId('adminList');
-    
-    console.log('🎯 DOM elements found:');
-    console.log('  - signinBtn:', !!signinBtn);
-    console.log('  - signupBtn:', !!signupBtn);
-    console.log('  - authMsg:', !!authMsg);
-    console.log('  - whoami:', !!whoami);
-    
     adminList.innerHTML = ADMIN_EMAILS.map(e => `<span class="pill">${e}</span>`).join(" ");
     whitelistWrap.textContent = `Allowed: ${ADMIN_EMAILS.join(", ")}`;
-    
-    console.log('✅ INIT: Application initialized successfully');
 
     async function ensureProfileAsAdmin(user) {
-      console.log('👥 Creating/updating profile for user:', user.id, user.email);
-      const { data, error } = await supabase.from('profiles').upsert({
+      await supabase.from('profiles').upsert({
         id: user.id,
         email: user.email,
         role: 'admin'
       });
-      console.log('📊 Profile upsert result:', { data, error });
-      if (error) {
-        console.log('❌ Failed to create/update profile:', error);
-      } else {
-        console.log('✅ Profile created/updated successfully');
-      }
     }
 
     function setAuthedUI(email) {
@@ -123,38 +103,15 @@
     }
 
     async function checkIsAdmin() {
-      console.log('🔍 DEBUG: Checking admin status...');
-      
       const { data: sessionData } = await supabase.auth.getSession();
-      console.log('📋 Session data:', sessionData);
-      
       const user = sessionData?.session?.user || null;
-      console.log('👤 Current user:', user);
-      
-      if (!user) { 
-        console.log('❌ No user session found, showing sign-out UI');
-        setSignedOutUI(); 
-        return; 
-      }
-      
+      if (!user) { setSignedOutUI(); return; }
       const email = user.email || "";
-      console.log('📧 User email from session:', email);
-      console.log('🎯 Email in whitelist?', ADMIN_EMAILS.includes(email));
-      
-      console.log('🔍 Fetching user profile from database...');
-      const { data: me, error: profileError } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-      
-      console.log('👥 Profile data:', me);
-      console.log('❗ Profile error:', profileError);
-      
+      const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       if (me?.role === 'admin' && ADMIN_EMAILS.includes(email)) {
-        console.log('✅ User is confirmed admin, setting authenticated UI');
         setAuthedUI(email);
         await loadInterviews();
       } else {
-        console.log('🚫 User is not admin or not whitelisted');
-        console.log('📊 Profile role:', me?.role);
-        console.log('🎯 Email check result:', ADMIN_EMAILS.includes(email));
         await supabase.auth.signOut();
         setSignedOutUI();
         alert('Access denied: not an admin.');
